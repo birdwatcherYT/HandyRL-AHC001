@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from pathlib import Path
 
 from ..environment import BaseEnvironment
 
@@ -20,12 +21,14 @@ class SimpleFCModel(nn.Module):
     def __init__(self, n):
         super().__init__()
 
+        features = 6
+        units = 32
         self.flatten = nn.Flatten()
-        self.linear1 = nn.Linear(4 * n, n)
-        self.linear2 = nn.Linear(n, 32)
+        self.linear1 = nn.Linear(features * n, n)
+        self.linear2 = nn.Linear(n, units)
 
-        self.head_p = nn.Linear(32, n * 4)
-        self.head_v = nn.Linear(32, 1)
+        self.head_p = nn.Linear(units, n * features)
+        self.head_v = nn.Linear(units, 1)
 
     def forward(self, x, hidden=None):
         h = self.flatten(x)
@@ -173,7 +176,18 @@ class Environment(BaseEnvironment):
 
     def observation(self, player=None):
         # input feature for neural nets
-        a = (self.rects / self.L).astype(np.float32)
+        # TODO: 特徴を足す 面積、スコア
+        # a = np.concatenate(
+        #     [self.rects / self.L, (self.R / self.Q_MAX).reshape((-1, 1))], axis=1
+        # ).astype(np.float32)
+        a = np.concatenate(
+            [
+                self.rects / self.L,
+                self.scores.reshape((-1, 1)),
+                (self.R / self.Q_MAX).reshape((-1, 1)),
+            ],
+            axis=1,
+        ).astype(np.float32)
         return a
 
     def print_input(self):
@@ -186,7 +200,7 @@ class Environment(BaseEnvironment):
             print(a, b, c, d)
 
     def draw(self, filename):
-        fig = plt.figure()
+        plt.clf()
         ax = plt.axes()
 
         for i, (a, b, c, d) in enumerate(self.rects):
@@ -201,22 +215,27 @@ class Environment(BaseEnvironment):
 
         plt.axis("scaled")
         ax.set_aspect("equal")
+        plt.title(f"{self.outcome()[0]}")
 
+        Path(filename).parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(filename)
 
 
 if __name__ == "__main__":
     e = Environment()
-    for i in range(1):
+    scores = []
+    for i in range(100):
         e.reset()
         while not e.terminal():
-            print(e)
+            # print(e)
             actions = e.legal_actions()
-            print([e.action2str(a) for a in actions])
+            # print([e.action2str(a) for a in actions])
             e.play(random.choice(actions))
         print("input")
         e.print_input()
         print("output")
         e.print_output()
-        print(e.outcome())
-        e.draw(f"ahc{i}.png")
+        print(e.outcome()[0])
+        e.draw(f"random/ahc{i}.png")
+        scores.append(e.outcome()[0])
+        print("mean:", np.mean(scores))

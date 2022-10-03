@@ -28,7 +28,7 @@ train_args:
     policy_target: 'TD' # 'UPGO' 'VTRACE' 'TD' 'MC'
     value_target: 'TD' # 'VTRACE' 'TD' 'MC'
     eval:
-        opponent: ['random']
+        opponent: []
     seed: 0
     restart_epoch: 0
 

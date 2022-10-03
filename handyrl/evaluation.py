@@ -6,6 +6,7 @@
 import random
 import time
 import multiprocessing as mp
+import numpy as np
 
 from .environment import prepare_env, make_env
 from .connection import send_recv, accept_socket_connections, connect_socket_connection
@@ -200,6 +201,7 @@ def eval_process_mp_child(agents, critic, env_args, index, in_queue, out_queue, 
         else:
             outcome = exec_match(env, agent_map, critic, show=show, game_args=game_args)
         out_queue.put((pat_idx, agent_ids, outcome))
+        # env.draw(f"images/result{g}.png")
     out_queue.put(None)
 
 
@@ -259,6 +261,8 @@ def evaluate_mp(env, agents, critic, env_args, args_patterns, num_process, num_g
         for pat_idx, results in r_map.items():
             print(pat_idx, {k: results[k] for k in sorted(results.keys(), reverse=True)}, wp_func(results))
         print('total', {k: total_results[p][k] for k in sorted(total_results[p].keys(), reverse=True)}, wp_func(total_results[p]))
+        print('scores:', ([k for k in total_results[p].keys()]))
+        print('mean:', np.mean([k for k in total_results[p].keys()]))
 
 
 def network_match_acception(n, env_args, num_agents, port):

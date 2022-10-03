@@ -10,6 +10,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 from ..environment import BaseEnvironment
 
@@ -20,10 +22,10 @@ class SimpleFCModel(nn.Module):
 
         self.flatten = nn.Flatten()
         self.linear1 = nn.Linear(4 * n, n)
-        self.linear2 = nn.Linear(n, 64)
+        self.linear2 = nn.Linear(n, 32)
 
-        self.head_p = nn.Linear(64, n * 4)
-        self.head_v = nn.Linear(64, 1)
+        self.head_p = nn.Linear(32, n * 4)
+        self.head_v = nn.Linear(32, 1)
 
     def forward(self, x, hidden=None):
         h = self.flatten(x)
@@ -36,8 +38,9 @@ class SimpleFCModel(nn.Module):
 
 
 class Environment(BaseEnvironment):
-    L = 10000
-    Q_MAX = 100000000
+    # L = 10000
+    L = 100
+    Q_MAX = L * L
     DIRECT = "ULDR"
     DIRECT_TO_INT = {"U": 0, "L": 1, "D": 2, "R": 3}
 
@@ -47,7 +50,8 @@ class Environment(BaseEnvironment):
 
     def reset(self, args=None):
         # self.N = round(50 * (4 ** np.random.rand()))
-        self.N = 50
+        # self.N = 50
+        self.N = 10
         all_points = [(i, j) for i in range(self.L) for j in range(self.L)]
         self.XY = random.sample(all_points, self.N)
         q = (
@@ -59,13 +63,19 @@ class Environment(BaseEnvironment):
 
         self.record = []
         # 1x1サイズから開始
-        self.rects = [
-            [self.XY[i][0], self.XY[i][1], self.XY[i][0] + 1, self.XY[i][1] + 1]
-            for i in range(self.N)
-        ]
-        self.scores = [
-            1 - (1 - min(self.R[i], 1) / max(self.R[i], 1)) ** 2 for i in range(self.N)
-        ]
+        self.rects = np.array(
+            [
+                [self.XY[i][0], self.XY[i][1], self.XY[i][0] + 1, self.XY[i][1] + 1]
+                for i in range(self.N)
+            ],
+            dtype=np.int32,
+        )
+        self.scores = np.array(
+            [
+                1 - (1 - min(self.R[i], 1) / max(self.R[i], 1)) ** 2
+                for i in range(self.N)
+            ]
+        )
         self.board = np.zeros((self.L, self.L), dtype=bool)
         for a, b, c, d in self.rects:
             self.board[a:c, b:d] = True
@@ -82,7 +92,8 @@ class Environment(BaseEnvironment):
     def __str__(self):
         return str(self.rects)
 
-    def calc_score(self, i, a, b, c, d):
+    def calc_score(self, i):
+        a, b, c, d = self.rects[i]
         s = (c - a) * (d - b)
         return 1 - (1 - min(self.R[i], s) / max(self.R[i], s)) ** 2
 
@@ -92,20 +103,20 @@ class Environment(BaseEnvironment):
         a, b, c, d = self.rects[i]
         if v == 0:
             self.board[(a - 1) : a, b:d] = True
-            self.rects[i][v] -= 1
+            self.rects[i, v] -= 1
         elif v == 1:
             self.board[a:c, (b - 1) : b] = True
-            self.rects[i][v] -= 1
+            self.rects[i, v] -= 1
         elif v == 2:
             self.board[c : (c + 1), b:d] = True
-            self.rects[i][v] += 1
+            self.rects[i, v] += 1
         elif v == 3:
             self.board[a:c, d : (d + 1)] = True
-            self.rects[i][v] += 1
+            self.rects[i, v] += 1
         else:
             raise
 
-        self.scores[i] = self.calc_score(i, a, b, c, d)
+        self.scores[i] = self.calc_score(i)
         self.record.append(action)
 
     def diff_info(self, _):
@@ -129,7 +140,8 @@ class Environment(BaseEnvironment):
 
     def outcome(self):
         # terminal outcome
-        return {0: 1e9 * sum(self.scores) / self.N}
+        # return {0: 1e9 * sum(self.scores) / self.N}
+        return {0: np.sum(self.scores) / self.N}
 
     def legal_actions(self, _=None):
         # legal action list
@@ -161,18 +173,50 @@ class Environment(BaseEnvironment):
 
     def observation(self, player=None):
         # input feature for neural nets
-        a = np.array(self.rects).astype(np.float32)
+        a = (self.rects / self.L).astype(np.float32)
         return a
+
+    def print_input(self):
+        print(self.N)
+        for i in range(self.N):
+            print(self.XY[i][0], self.XY[i][1], self.R[i])
+
+    def print_output(self):
+        for a, b, c, d in self.rects:
+            print(a, b, c, d)
+
+    def draw(self, filename):
+        fig = plt.figure()
+        ax = plt.axes()
+
+        for i, (a, b, c, d) in enumerate(self.rects):
+            r = patches.Rectangle(
+                xy=(a, b), width=c - a, height=d - b, fc="c", ec="k", fill=True
+            )
+            ax.add_patch(r)
+            plt.text(a, b, f"{self.scores[i]:.4f}")
+        for i in range(self.N):
+            c = patches.Circle(xy=self.XY[i], radius=1, fc="r")
+            ax.add_patch(c)
+
+        plt.axis("scaled")
+        ax.set_aspect("equal")
+
+        plt.savefig(filename)
 
 
 if __name__ == "__main__":
     e = Environment()
-    for _ in range(100):
+    for i in range(1):
         e.reset()
         while not e.terminal():
             print(e)
             actions = e.legal_actions()
             print([e.action2str(a) for a in actions])
             e.play(random.choice(actions))
-        print(e)
+        print("input")
+        e.print_input()
+        print("output")
+        e.print_output()
         print(e.outcome())
+        e.draw(f"ahc{i}.png")

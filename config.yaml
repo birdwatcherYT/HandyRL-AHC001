@@ -1,9 +1,10 @@
 
 env_args:
-    env: 'TicTacToe'
+    # env: 'TicTacToe'
     #env: 'Geister'
     #env: 'HungryGeese'
     #env: 'handyrl.envs.parallel_tictactoe'  # specify by path
+    env: 'handyrl.envs.ahc'  # specify by path
 
 train_args:
     turn_based_training: True

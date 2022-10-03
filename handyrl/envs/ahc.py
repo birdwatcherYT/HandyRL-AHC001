@@ -14,61 +14,21 @@ import torch.nn.functional as F
 from ..environment import BaseEnvironment
 
 
-class Conv(nn.Module):
-    def __init__(self, filters0, filters1, kernel_size, bn, bias=True):
-        super().__init__()
-        if bn:
-            bias = False
-        self.conv = nn.Conv2d(
-            filters0,
-            filters1,
-            kernel_size,
-            stride=1,
-            padding=kernel_size // 2,
-            bias=bias,
-        )
-        self.bn = nn.BatchNorm2d(filters1) if bn else None
-
-    def forward(self, x):
-        h = self.conv(x)
-        if self.bn is not None:
-            h = self.bn(h)
-        return h
-
-
-class Head(nn.Module):
-    def __init__(self, input_size, out_filters, outputs):
-        super().__init__()
-
-        self.board_size = input_size[1] * input_size[2]
-        self.out_filters = out_filters
-
-        self.conv = Conv(input_size[0], out_filters, 1, bn=False)
-        self.activation = nn.LeakyReLU(0.1)
-        self.fc = nn.Linear(self.board_size * out_filters, outputs, bias=False)
-
-    def forward(self, x):
-        h = self.activation(self.conv(x))
-        h = self.fc(h.view(-1, self.board_size * self.out_filters))
-        return h
-
-
-class SimpleConv2dModel(nn.Module):
+class SimpleFCModel(nn.Module):
     def __init__(self, n):
         super().__init__()
-        layers, filters = 3, 32
 
-        self.conv = nn.Conv2d(3, filters, 3, stride=1, padding=1)
-        self.blocks = nn.ModuleList(
-            [Conv(filters, filters, 3, bn=True) for _ in range(layers)]
-        )
-        self.head_p = Head((filters, n, 4), 2, n * 4)
-        self.head_v = Head((filters, n, 4), 1, 1)
+        self.flatten = nn.Flatten()
+        self.linear1 = nn.Linear(4 * n, n)
+        self.linear2 = nn.Linear(n, 64)
+
+        self.head_p = nn.Linear(64, n * 4)
+        self.head_v = nn.Linear(64, 1)
 
     def forward(self, x, hidden=None):
-        h = F.relu(self.conv(x))
-        for block in self.blocks:
-            h = F.relu(block(h))
+        h = self.flatten(x)
+        h = F.relu(self.linear1(h))
+        h = F.relu(self.linear2(h))
         h_p = self.head_p(h)
         h_v = self.head_v(h)
 
@@ -126,20 +86,22 @@ class Environment(BaseEnvironment):
 
     def play(self, action, _=None):
         # state transition function
-        i, v = action
+        i, v = action // 4, action % 4
         a, b, c, d = self.rects[i]
-        if v == "u":
+        if v == 0:
             self.board[(a - 1) : a, b:d] = True
-            self.rects[i][0] -= 1
-        elif v == "d":
-            self.board[c : (c + 1), b:d] = True
-            self.rects[i][2] += 1
-        elif v == "l":
+            self.rects[i][v] -= 1
+        elif v == 1:
             self.board[a:c, (b - 1) : b] = True
-            self.rects[i][1] -= 1
-        else:
+            self.rects[i][v] -= 1
+        elif v == 2:
+            self.board[c : (c + 1), b:d] = True
+            self.rects[i][v] += 1
+        elif v == 3:
             self.board[a:c, d : (d + 1)] = True
-            self.rects[i][3] += 1
+            self.rects[i][v] += 1
+        else:
+            raise
 
         self.scores[i] = self.calc_score(i, a, b, c, d)
         self.record.append(action)
@@ -170,25 +132,30 @@ class Environment(BaseEnvironment):
     def legal_actions(self, _=None):
         # legal action list
         return [
-            (i, v) for i in range(self.N) for v in "udlr" if self.action_check(i, v)
+            i * 4 + v
+            for i in range(self.N)
+            for v in range(4)
+            if self.action_check(i, v)
         ]
 
     def action_check(self, i, v):
         a, b, c, d = self.rects[i]
-        if v == "u":
+        if v == 0:
             return a - 1 >= 0 and not self.board[(a - 1) : a, b:d].any()
-        elif v == "d":
-            return c + 1 <= self.L and not self.board[c : (c + 1), b:d].any()
-        elif v == "l":
+        elif v == 1:
             return b - 1 >= 0 and not self.board[a:c, (b - 1) : b].any()
-        else:
+        elif v == 2:
+            return c + 1 <= self.L and not self.board[c : (c + 1), b:d].any()
+        elif v == 3:
             return d + 1 <= self.L and not self.board[a:c, d : (d + 1)].any()
+        else:
+            raise
 
     def players(self):
         return [0]
 
     def net(self):
-        return SimpleConv2dModel(self.N)
+        return SimpleFCModel(self.N)
 
     def observation(self, player=None):
         # input feature for neural nets

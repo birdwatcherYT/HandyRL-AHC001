@@ -38,6 +38,8 @@ class SimpleFCModel(nn.Module):
 class Environment(BaseEnvironment):
     L = 10000
     Q_MAX = 100000000
+    DIRECT = "ULDR"
+    DIRECT_TO_INT = {"U": 0, "L": 1, "D": 2, "R": 3}
 
     def __init__(self, args=None):
         super().__init__()
@@ -69,10 +71,10 @@ class Environment(BaseEnvironment):
             self.board[a:c, b:d] = True
 
     def action2str(self, a, _=None):
-        return f"{a[0]}{a[1]}"
+        return f"{a//4}{self.DIRECT[a%4]}"
 
     def str2action(self, s, _=None):
-        return (int(s[:-1]), s[-1])
+        return int(s[:-1]) * 4 + self.DIRECT_TO_INT[s[-1]]
 
     def record_string(self):
         return " ".join([self.action2str(a) for a in self.record])

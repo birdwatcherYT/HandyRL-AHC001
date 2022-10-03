@@ -97,7 +97,7 @@ class Environment(BaseEnvironment):
         self.record = []
         # 1x1サイズから開始
         self.rects = [
-            (self.XY[i][0], self.XY[i][1], self.XY[i][0] + 1, self.XY[i][1] + 1)
+            [self.XY[i][0], self.XY[i][1], self.XY[i][0] + 1, self.XY[i][1] + 1]
             for i in range(self.N)
         ]
         self.scores = [

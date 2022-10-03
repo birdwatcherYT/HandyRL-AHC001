@@ -84,7 +84,8 @@ class Environment(BaseEnvironment):
         self.reset(args)
 
     def reset(self, args=None):
-        self.N = round(50 * (4 ** np.random.rand()))
+        # self.N = round(50 * (4 ** np.random.rand()))
+        self.N = 50
         all_points = [(i, j) for i in range(self.L) for j in range(self.L)]
         self.XY = random.sample(all_points, self.N)
         q = (

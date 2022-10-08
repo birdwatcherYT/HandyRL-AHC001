@@ -1,8 +1,3 @@
-# Copyright (c) 2020 DeNA Co., Ltd.
-# Licensed under The MIT License [see LICENSE for details]
-
-# implementation of Tic-Tac-Toe
-
 import copy
 import random
 
@@ -176,15 +171,13 @@ class Environment(BaseEnvironment):
 
     def observation(self, player=None):
         # input feature for neural nets
-        # TODO: 特徴を足す 面積、スコア
-        # a = np.concatenate(
-        #     [self.rects / self.L, (self.R / self.Q_MAX).reshape((-1, 1))], axis=1
-        # ).astype(np.float32)
+        s = np.array([(c - a) * (d - b) for (a, b, c, d) in self.rects])
         a = np.concatenate(
             [
                 self.rects / self.L,
                 self.scores.reshape((-1, 1)),
-                (self.R / self.Q_MAX).reshape((-1, 1)),
+                (s / self.R).reshape((-1, 1)),
+                # (self.R / self.Q_MAX).reshape((-1, 1)),
             ],
             axis=1,
         ).astype(np.float32)

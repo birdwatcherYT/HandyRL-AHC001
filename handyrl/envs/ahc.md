@@ -37,9 +37,9 @@ https://www.terry-u16.net/entry/ahc001-how-to
     - s[i]: 広告iの面積
 
 ### 渡す特徴
-- rects / L
-- self.scores
-- s / R
+- 各広告の位置情報：rects / L
+- 各広告のスコア：self.scores
+- 現在の面積と求められている面積比：s / R
 
 盤面の埋まっている情報も必要?
 

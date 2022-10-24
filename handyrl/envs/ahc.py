@@ -136,6 +136,9 @@ class Environment(BaseEnvironment):
         # check whether the state is terminal
         return len(self.legal_actions()) == 0
 
+    # def reward(self):
+    #     return {0: np.sum(self.scores) / self.N}
+
     def outcome(self):
         # terminal outcome
         # return {0: 1e9 * sum(self.scores) / self.N}

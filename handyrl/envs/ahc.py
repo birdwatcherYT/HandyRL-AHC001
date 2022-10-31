@@ -22,7 +22,7 @@ class SimpleFCModel(nn.Module):
         self.linear1 = nn.Linear(features * n, n)
         self.linear2 = nn.Linear(n, units)
 
-        self.head_p = nn.Linear(units, n * features)
+        self.head_p = nn.Linear(units, n * 4)
         self.head_v = nn.Linear(units, 1)
 
     def forward(self, x, hidden=None):
@@ -90,10 +90,14 @@ class Environment(BaseEnvironment):
     def __str__(self):
         return str(self.rects)
 
+    @staticmethod
+    def __calc_score(a, b, c, d, r):
+        s = (c - a) * (d - b)
+        return 1 - (1 - min(r, s) / max(r, s)) ** 2
+
     def calc_score(self, i):
         a, b, c, d = self.rects[i]
-        s = (c - a) * (d - b)
-        return 1 - (1 - min(self.R[i], s) / max(self.R[i], s)) ** 2
+        return Environment.__calc_score(a, b, c, d, self.R[i])
 
     def play(self, action, _=None):
         # state transition function
@@ -136,8 +140,8 @@ class Environment(BaseEnvironment):
         # check whether the state is terminal
         return len(self.legal_actions()) == 0
 
-    # def reward(self):
-    #     return {0: np.sum(self.scores) / self.N}
+    def reward(self):
+        return {0: np.sum(self.scores) / self.N}
 
     def outcome(self):
         # terminal outcome
@@ -156,13 +160,29 @@ class Environment(BaseEnvironment):
     def action_check(self, i, v):
         a, b, c, d = self.rects[i]
         if v == 0:
-            return a - 1 >= 0 and not self.board[(a - 1) : a, b:d].any()
+            return (
+                a - 1 >= 0
+                and not self.board[(a - 1) : a, b:d].any()
+                and Environment.__calc_score(a - 1, b, c, d, self.R[i]) > self.scores[i]
+            )
         elif v == 1:
-            return b - 1 >= 0 and not self.board[a:c, (b - 1) : b].any()
+            return (
+                b - 1 >= 0
+                and not self.board[a:c, (b - 1) : b].any()
+                and Environment.__calc_score(a, b - 1, c, d, self.R[i]) > self.scores[i]
+            )
         elif v == 2:
-            return c + 1 <= self.L and not self.board[c : (c + 1), b:d].any()
+            return (
+                c + 1 <= self.L
+                and not self.board[c : (c + 1), b:d].any()
+                and Environment.__calc_score(a, b, c + 1, d, self.R[i]) > self.scores[i]
+            )
         elif v == 3:
-            return d + 1 <= self.L and not self.board[a:c, d : (d + 1)].any()
+            return (
+                d + 1 <= self.L
+                and not self.board[a:c, d : (d + 1)].any()
+                and Environment.__calc_score(a, b, c, d + 1, self.R[i]) > self.scores[i]
+            )
         else:
             raise
 

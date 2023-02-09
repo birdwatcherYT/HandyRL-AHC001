@@ -12,32 +12,46 @@ from pathlib import Path
 from ..environment import BaseEnvironment
 
 
-class SimpleFCModel(nn.Module):
-    def __init__(self, n):
-        super().__init__()
-
-        features = 6
-        units = 32
-        self.flatten = nn.Flatten()
-        self.linear1 = nn.Linear(features * n, n)
-        self.linear2 = nn.Linear(n, units)
-
-        self.head_p = nn.Linear(units, n * 4)
-        self.head_v = nn.Linear(units, 1)
+class SimpleCNN(nn.Module):
+    def __init__(self, n, L):
+        super(SimpleCNN, self).__init__()
+        self.network = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 32 x L/2 x L/2
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 32 x L/4 x L/4
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),  # output: 32 x L/8 x L/8
+            nn.Flatten(),
+            nn.Linear(32 * L // 8 * L // 8, 512),
+            nn.ReLU(),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+        )
+        self.head_p = nn.Linear(256, L * L * 4)
+        self.head_v = nn.Linear(256, 1)
 
     def forward(self, x, hidden=None):
-        h = self.flatten(x)
-        h = F.relu(self.linear1(h))
-        h = F.relu(self.linear2(h))
+        h = self.network(x)
         h_p = self.head_p(h)
         h_v = self.head_v(h)
-
-        return {"policy": h_p, "value": torch.tanh(h_v)}
+        return {"policy": h_p, "value": torch.sigmoid(h_v)}
 
 
 class Environment(BaseEnvironment):
     # L = 10000
-    L = 100
+    # L = 100
+    L = 32
+    # L = 50
     Q_MAX = L * L
     DIRECT = "ULDR"
     DIRECT_TO_INT = {"U": 0, "L": 1, "D": 2, "R": 3}
@@ -49,7 +63,9 @@ class Environment(BaseEnvironment):
     def reset(self, args=None):
         # self.N = round(50 * (4 ** np.random.rand()))
         # self.N = 50
-        self.N = 10
+        self.N = 16
+        # self.N = 10
+        # self.N = 5
         all_points = [(i, j) for i in range(self.L) for j in range(self.L)]
         self.XY = random.sample(all_points, self.N)
         q = (
@@ -78,6 +94,10 @@ class Environment(BaseEnvironment):
         for a, b, c, d in self.rects:
             self.board[a:c, b:d] = True
 
+        self.board2id = -np.ones((self.L, self.L), dtype=int)
+        for i, (x, y) in enumerate(self.XY):
+            self.board2id[x, y] = i
+
     def action2str(self, a, _=None):
         return f"{a//4}{self.DIRECT[a%4]}"
 
@@ -101,7 +121,9 @@ class Environment(BaseEnvironment):
 
     def play(self, action, _=None):
         # state transition function
-        i, v = action // 4, action % 4
+        pos, v = action // 4, action % 4
+        i = self.board2id[pos // self.L, pos % self.L]
+        assert i >= 0
         a, b, c, d = self.rects[i]
         if v == 0:
             self.board[(a - 1) : a, b:d] = True
@@ -140,8 +162,8 @@ class Environment(BaseEnvironment):
         # check whether the state is terminal
         return len(self.legal_actions()) == 0
 
-    def reward(self):
-        return {0: np.sum(self.scores) / self.N}
+    # def reward(self):
+    #     return {0: np.sum(self.scores) / self.N}
 
     def outcome(self):
         # terminal outcome
@@ -151,13 +173,16 @@ class Environment(BaseEnvironment):
     def legal_actions(self, _=None):
         # legal action list
         return [
-            i * 4 + v
-            for i in range(self.N)
+            (i * self.L + j) * 4 + v
+            for i in range(self.L)
+            for j in range(self.L)
             for v in range(4)
-            if self.action_check(i, v)
+            if self.action_check(self.board2id[i, j], v)
         ]
 
     def action_check(self, i, v):
+        if i < 0:
+            return False
         a, b, c, d = self.rects[i]
         if v == 0:
             return (
@@ -190,21 +215,17 @@ class Environment(BaseEnvironment):
         return [0]
 
     def net(self):
-        return SimpleFCModel(self.N)
+        return SimpleCNN(self.N, self.L)
 
     def observation(self, player=None):
         # input feature for neural nets
-        s = np.array([(c - a) * (d - b) for (a, b, c, d) in self.rects])
-        a = np.concatenate(
-            [
-                self.rects / self.L,
-                self.scores.reshape((-1, 1)),
-                (s / self.R).reshape((-1, 1)),
-                # (self.R / self.Q_MAX).reshape((-1, 1)),
-            ],
-            axis=1,
-        ).astype(np.float32)
-        return a
+        board_score = np.zeros((self.L, self.L), dtype=np.float32)
+        for (x, y), s in zip(self.XY, self.scores):
+            board_score[x, y] = s
+        board_position = np.zeros((self.L, self.L), dtype=np.float32)
+        for (x, y), r in zip(self.XY, self.R):
+            board_position[x, y] = r
+        return np.stack([self.board, board_score, board_position])
 
     def print_input(self):
         print(self.N)

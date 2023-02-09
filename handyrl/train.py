@@ -502,7 +502,8 @@ class Learner:
                 n, r, r2 = results
                 mean = r / (n + 1e-6)
                 name_tag = ' (%s)' % name if name != '' else ''
-                print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
+                # print('win rate%s = %.3f (%.1f / %d)' % (name_tag, (mean + 1) / 2, (r + n) / 2, n))
+                print('outcome mean%s = %.3f (%.1f / %d)' % (name_tag, mean, r, n))
 
             keys = self.results_per_opponent[self.model_epoch]
             if len(self.args.get('eval', {}).get('opponent', [])) <= 1 and len(keys) <= 1:

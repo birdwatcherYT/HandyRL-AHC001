@@ -169,7 +169,8 @@ class Evaluator:
             if model is None:
                 agents[p] = build_agent(opponent, self.env)
             else:
-                agents[p] = Agent(model)
+                # agents[p] = Agent(model)
+                agents[p] = Agent(model, temperature=1)
 
         outcome = exec_match(self.env, agents)
         if outcome is None:
@@ -391,7 +392,8 @@ def eval_main(args, argv):
         agent = build_agent(model_path, env)
         if agent is None:
             model = load_model(model_path, env.net())
-            agent = Agent(model)
+            # agent = Agent(model)
+            agent = Agent(model, temperature=1)
         return agent
 
     main_agent = resolve_agent(model_paths[0])
